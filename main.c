@@ -45,8 +45,10 @@
 #include <fcntl.h>
 #include <sys/mman.h>
 #include <libgen.h>
+#include <stdbool.h>
 
 #include "structs.h"
+#include "tests.c"
 
 /** Client parameters **/
 static char *_pcap_file[MAX_NUM_READER_THREADS]; /**< Ingress pcap file/interfaces */
@@ -83,8 +85,6 @@ u_int32_t current_ndpi_memory = 0, max_ndpi_memory = 0;
 
 
 void test_lib(); /* Forward */
-
-/* ********************************** */
 
 #ifdef DEBUG_TRACE
 FILE *trace = NULL;
@@ -133,7 +133,7 @@ static void help(u_int long_help) {
                    "  -x <file.json>            | Produce bpf filters for specified diagnose file. Use\n"
                    "                            | this option only for .json files generated with -b flag.\n");
 
-    if(long_help) {
+    if (long_help) {
         printf("\n\nSupported protocols:\n");
         num_threads = 1;
         setupDetection(0, NULL);
@@ -141,42 +141,6 @@ static void help(u_int long_help) {
     }
     exit(!long_help);
 }
-
-
-static struct option longopts[] = {
-        /* mandatory extcap options */
-        { "extcap-interfaces", no_argument, NULL, '0'},
-        { "extcap-version", optional_argument, NULL, '1'},
-        { "extcap-dlts", no_argument, NULL, '2'},
-        { "extcap-interface", required_argument, NULL, '3'},
-        { "extcap-config", no_argument, NULL, '4'},
-        { "capture", no_argument, NULL, '5'},
-        { "extcap-capture-filter", required_argument, NULL, '6'},
-        { "fifo", required_argument, NULL, '7'},
-        { "debug", optional_argument, NULL, '8'},
-        { "ndpi-proto-filter", required_argument, NULL, '9'},
-
-        /* ndpiReader options */
-        { "enable-protocol-guess", no_argument, NULL, 'd'},
-        { "interface", required_argument, NULL, 'i'},
-        { "filter", required_argument, NULL, 'f'},
-        { "cpu-bind", required_argument, NULL, 'g'},
-        { "loops", required_argument, NULL, 'l'},
-        { "num-threads", required_argument, NULL, 'n'},
-
-        { "protos", required_argument, NULL, 'p'},
-        { "capture-duration", required_argument, NULL, 's'},
-        { "decode-tunnels", no_argument, NULL, 't'},
-        { "revision", no_argument, NULL, 'r'},
-        { "verbose", no_argument, NULL, 'v'},
-        { "version", no_argument, NULL, 'V'},
-        { "help", no_argument, NULL, 'h'},
-        { "json", required_argument, NULL, 'j'},
-        { "result-path", required_argument, NULL, 'w'},
-        { "quiet", no_argument, NULL, 'q'},
-
-        {0, 0, 0, 0}
-};
 
 /* ********************************** */
 
@@ -340,7 +304,7 @@ static void parseOptions(int argc, char **argv) {
                 printf("WARNING: this copy of ndpiReader has been compiled without JSON-C: json export disabled\n");
 #else
             _diagnoseFilePath = optarg;
-      bpf_filter_flag = 1;
+             bpf_filter_flag = 1;
 #endif
                 break;
 
@@ -392,7 +356,7 @@ static void parseOptions(int argc, char **argv) {
                 break;
 
             case 'j':
-                printf("json disabled\n");
+                printf("json is disabled\n");
                 break;
 
             case 'w':
@@ -1891,6 +1855,14 @@ void test_lib() {
             exit(-1);
         }
     }
+
+
+    while(true){
+        printf("%d", ndpi_thread_info[0].workflow->stats.ip_packet_count);
+    }
+
+
+
     /* Waiting for completion */
     for(thread_id = 0; thread_id < num_threads; thread_id++) {
         status = pthread_join(ndpi_thread_info[thread_id].pthread, &thd_res);
@@ -1919,20 +1891,6 @@ void test_lib() {
     }
 }
 
-void automataUnitTest() {
-    void *automa;
-
-    assert(automa = ndpi_init_automa());
-    assert(ndpi_add_string_to_automa(automa, "hello") == 0);
-    assert(ndpi_add_string_to_automa(automa, "world") == 0);
-    ndpi_finalize_automa(automa);
-    assert(ndpi_match_string(automa, "This is the wonderful world of nDPI") == 0);
-
-    ndpi_free_automa(automa);
-}
-
-/* *********************************************** */
-
 
 
 /**
@@ -1946,10 +1904,6 @@ int main(int argc, char **argv) {
     memset(ndpi_thread_info, 0, sizeof(ndpi_thread_info));
 
     parseOptions(argc, argv);
-
-    if(bpf_filter_flag) {
-
-    }
 
     if(!quiet_mode) {
         printf("\n nDPI started \n");
