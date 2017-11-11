@@ -49,6 +49,7 @@
 
 #include "structs.h"
 #include "tests.c"
+#include "logger.h"
 
 /** Client parameters **/
 static char *_pcap_file[MAX_NUM_READER_THREADS]; /**< Ingress pcap file/interfaces */
@@ -57,10 +58,11 @@ static FILE *results_file           = NULL;
 static char *results_path           = NULL;
 static char * bpfFilter             = NULL; /**< bpf filter  */
 static char *_protoFilePath         = NULL; /**< Protocol file path  */
-static u_int8_t live_capture = 0;
+static u_int8_t live_capture = 1;
 static u_int8_t undetected_flows_deleted = 0;
+static u_int8_t specific_protocol_number = 37;
 /** User preferences **/
-static u_int8_t enable_protocol_guess = 1, verbose = 0, nDPI_traceLevel = 0, json_flag = 0;
+static u_int8_t enable_protocol_guess = 0, verbose = 1, nDPI_traceLevel = 0, json_flag = 0;
 static u_int8_t stats_flag = 0, bpf_filter_flag = 0;
 static u_int32_t pcap_analysis_duration = (u_int32_t)-1;
 static u_int16_t decode_tunnels = 0;
@@ -103,35 +105,17 @@ static void setupDetection(u_int16_t thread_id, pcap_t * pcap_handle);
 static void help(u_int long_help) {
     printf("Welcome to nDPI %s\n\n", ndpi_revision());
 
-    printf("ndpiReader -i <file|device> [-f <filter>][-s <duration>][-m <duration>]\n"
-                   "          [-p <protos>][-l <loops> [-q][-d][-h][-t][-v <level>]\n"
-                   "          [-n <threads>] [-w <file>] [-j <file>] [-x <file>] \n\n"
-                   "Usage:\n"
+    printf(             "Usage:\n"
                    "  -i <file.pcap|device>     | Specify a pcap file/playlist to read packets from or a\n"
                    "                            | device for live capture (comma-separated list)\n"
-                   "  -f <BPF filter>           | Specify a BPF filter for filtering selected traffic\n"
                    "  -s <duration>             | Maximum capture duration in seconds (live traffic capture only)\n"
-                   "  -m <duration>             | Split analysis duration in <duration> max seconds\n"
                    "  -p <file>.protos          | Specify a protocol file (eg. protos.txt)\n"
-                   "  -l <num loops>            | Number of detection loops (test only)\n"
-                   "  -n <num threads>          | Number of threads. Default: number of interfaces in -i.\n"
                    "                            | Ignored with pcap files.\n"
-                   "  -j <file.json>            | Specify a file to write the content of packets in .json format\n"
-                   "  -g <id:id...>             | Thread affinity mask (one core id per thread)\n"
-                   "  -d                        | Disable protocol guess and use only DPI\n"
                    "  -q                        | Quiet mode\n"
-                   "  -t                        | Dissect GTP/TZSP tunnels\n"
                    "  -r                        | Print nDPI version and git revision\n"
-                   "  -w <path>                 | Write test output on the specified file. This is useful for\n"
-                   "                            | testing purposes in order to compare results across runs\n"
+                   "  -w <path>                 |logging file for specific protocol flow detection\n"
                    "  -h                        | This help\n"
-                   "  -v <1|2|3>                | Verbose 'unknown protocol' packet print.\n"
-                   "                            | 1 = verbose\n"
-                   "                            | 2 = very verbose\n"
-                   "                            | 3 = port stats\n"
-                   "  -b <file.json>            | Specify a file to write port based diagnose statistics\n"
-                   "  -x <file.json>            | Produce bpf filters for specified diagnose file. Use\n"
-                   "                            | this option only for .json files generated with -b flag.\n");
+                   "  -v                        | protocol number to log\n");
 
     if (long_help) {
         printf("\n\nSupported protocols:\n");
@@ -140,22 +124,6 @@ static void help(u_int long_help) {
         ndpi_dump_protocols(ndpi_thread_info[0].workflow->ndpi_struct);
     }
     exit(!long_help);
-}
-
-/* ********************************** */
-
-void extcap_interfaces() {
-    printf("extcap {version=%s}\n", ndpi_revision());
-    printf("interface {value=ndpi}{display=nDPI interface}\n");
-    exit(0);
-}
-
-/* ********************************** */
-
-void extcap_dlts() {
-    u_int dlts_number = DLT_EN10MB;
-    printf("dlt {number=%u}{name=%s}{display=%s}\n", dlts_number, "ndpi", "nDPI Interface");
-    exit(0);
 }
 
 /* ********************************** */
@@ -261,20 +229,9 @@ static void parseOptions(int argc, char **argv) {
     int option_idx = 0, do_capture = 0;
     char *__pcap_file = NULL, *bind_mask = NULL;
     int thread_id, opt;
-#ifdef linux
     u_int num_cores = sysconf(_SC_NPROCESSORS_ONLN);
-#endif
-
-#ifdef DEBUG_TRACE
-    trace = fopen("/tmp/ndpiReader.log", "a");
-
-  if(trace) fprintf(trace, " #### %s #### \n", __FUNCTION__);
-#endif
 
     while ((opt = getopt_long(argc, argv, "df:g:i:hp:l:s:tv:V:n:j:rp:w:q0123:456:7:89:m:b:x:", longopts, &option_idx)) != EOF) {
-#ifdef DEBUG_TRACE
-        if(trace) fprintf(trace, " #### -%c [%s] #### \n", opt, optarg ? optarg : "");
-#endif
 
         switch (opt) {
             case 'd':
@@ -286,47 +243,9 @@ static void parseOptions(int argc, char **argv) {
                 _pcap_file[0] = optarg;
                 break;
 
-            case 'b':
-#ifndef HAVE_JSON_C
-                printf("WARNING: this copy of ndpiReader has been compiled without JSON-C: json export disabled\n");
-#else
-            _statsFilePath = optarg;
-      stats_flag = 1;
-#endif
-                break;
-
-            case 'm':
-                pcap_analysis_duration = atol(optarg);
-                break;
-
-            case 'x':
-#ifndef HAVE_JSON_C
-                printf("WARNING: this copy of ndpiReader has been compiled without JSON-C: json export disabled\n");
-#else
-            _diagnoseFilePath = optarg;
-             bpf_filter_flag = 1;
-#endif
-                break;
-
             case 'f':
             case '6':
                 bpfFilter = optarg;
-                break;
-
-            case 'g':
-                bind_mask = optarg;
-                break;
-
-            case 'l':
-                num_loops = atoi(optarg);
-                break;
-
-            case 'n':
-                num_threads = atoi(optarg);
-                break;
-
-            case 'p':
-                _protoFilePath = optarg;
                 break;
 
             case 's':
@@ -343,7 +262,7 @@ static void parseOptions(int argc, char **argv) {
                 exit(0);
 
             case 'v':
-                verbose = atoi(optarg);
+                specific_protocol_number = atoi(optarg);
                 break;
 
             case 'V':
@@ -351,57 +270,12 @@ static void parseOptions(int argc, char **argv) {
                 nDPI_traceLevel  = atoi(optarg);
                 break;
 
-            case 'h':
-                help(1);
-                break;
-
-            case 'j':
-                printf("json is disabled\n");
-                break;
-
             case 'w':
-                results_path = strdup(optarg);
-                if((results_file = fopen(results_path, "w")) == NULL) {
-                    printf("Unable to write in file %s: quitting\n", results_path);
-                    return;
-                }
+                setup_logger(strdup(optarg));
                 break;
 
             case 'q':
                 quiet_mode = 1;
-                break;
-
-                /* Extcap */
-            case '0':
-                extcap_interfaces();
-                break;
-
-            case '1':
-                printf("extcap {version=%s}\n", ndpi_revision());
-                break;
-
-            case '2':
-                extcap_dlts();
-                break;
-
-            case '4':
-                extcap_config();
-                break;
-
-            case '5':
-                do_capture = 1;
-                break;
-
-            case '7':
-                extcap_capture_fifo = strdup(optarg);
-                break;
-
-            case '8':
-                nDPI_traceLevel = 9;
-                break;
-
-            case '9':
-                extcap_packet_filter = atoi(optarg);
                 break;
 
             default:
@@ -447,42 +321,6 @@ static void parseOptions(int argc, char **argv) {
         }
     }
 
-#ifdef DEBUG_TRACE
-    if(trace) fclose(trace);
-#endif
-}
-
-
-/**
- * @brief From IPPROTO to string NAME
- */
-static char* ipProto2Name(u_int16_t proto_id) {
-
-    static char proto[8];
-
-    switch(proto_id) {
-        case IPPROTO_TCP:
-            return("TCP");
-            break;
-        case IPPROTO_UDP:
-            return("UDP");
-            break;
-        case IPPROTO_ICMP:
-            return("ICMP");
-            break;
-        case IPPROTO_ICMPV6:
-            return("ICMPV6");
-            break;
-        case 112:
-            return("VRRP");
-            break;
-        case IPPROTO_IGMP:
-            return("IGMP");
-            break;
-    }
-
-    snprintf(proto, sizeof(proto), "%u", proto_id);
-    return(proto);
 }
 
 
@@ -572,6 +410,8 @@ static void printFlow(u_int16_t id, struct ndpi_flow_info *flow, u_int16_t threa
 }
 
 
+
+
 /**
  * @brief Unknown Proto Walker
  */
@@ -625,11 +465,13 @@ static u_int16_t node_guess_undetected_protocol(u_int16_t thread_id, struct ndpi
     return(flow->detected_protocol.app_protocol);
 }
 
+int jej = 0;
 
 /**
  * @brief Proto Guess Walker
  */
 static void node_proto_guess_walker(const void *node, ndpi_VISIT which, int depth, void *user_data) {
+
     struct ndpi_flow_info *flow = *(struct ndpi_flow_info **) node;
     u_int16_t thread_id = *((u_int16_t *) user_data);
 
@@ -647,6 +489,9 @@ static void node_proto_guess_walker(const void *node, ndpi_VISIT which, int dept
         ndpi_thread_info[thread_id].workflow->stats.protocol_counter[flow->detected_protocol.app_protocol]       += flow->src2dst_packets + flow->dst2src_packets;
         ndpi_thread_info[thread_id].workflow->stats.protocol_counter_bytes[flow->detected_protocol.app_protocol] += flow->src2dst_bytes + flow->dst2src_bytes;
         ndpi_thread_info[thread_id].workflow->stats.protocol_flows[flow->detected_protocol.app_protocol]++;
+
+        //printf("%d - %d\n",jej++, flow->detected_protocol.app_protocol);
+
     }
 }
 
@@ -843,15 +688,6 @@ static void updatePortStats(struct port_stats **stats, u_int32_t port,
 /* @brief heuristic choice for receiver stats */
 static int acceptable(u_int32_t num_pkts){
     return num_pkts > 5;
-}
-
-/* *********************************************** */
-
-static int receivers_sort(void *_a, void *_b) {
-    struct receiver *a = (struct receiver *)_a;
-    struct receiver *b = (struct receiver *)_b;
-
-    return(b->num_pkts - a->num_pkts);
 }
 
 /* *********************************************** */
@@ -1053,7 +889,7 @@ static void node_idle_scan_walker(const void *node, ndpi_VISIT which, int depth,
     struct ndpi_flow_info *flow = *(struct ndpi_flow_info **) node;
     u_int16_t thread_id = *((u_int16_t *) user_data);
 
-    if(ndpi_thread_info[thread_id].num_idle_flows == IDLE_SCAN_BUDGET) /* TODO optimise with a budget-based walk */
+    if(ndpi_thread_info[thread_id].num_idle_flows == IDLE_SCAN_BUDGET)
         return;
 
     if((which == ndpi_preorder) || (which == ndpi_leaf)) { /* Avoid walking the same node multiple times */
@@ -1074,13 +910,14 @@ static void node_idle_scan_walker(const void *node, ndpi_VISIT which, int depth,
     }
 }
 
-
 /**
  * @brief On Protocol Discover - call node_guess_undetected_protocol() for protocol
  */
 static void on_protocol_discovered(struct ndpi_workflow * workflow,
                                    struct ndpi_flow_info * flow,
                                    void * udata) {
+    //TODO on proto discovered
+    //printf("%d - protocol discovered - %d\n ", j++, flow->detected_protocol.app_protocol);
 
     const u_int16_t thread_id = (uintptr_t) udata;
 
@@ -1091,8 +928,12 @@ static void on_protocol_discovered(struct ndpi_workflow * workflow,
                         flow->detected_protocol.master_protocol = NDPI_PROTOCOL_UNKNOWN;
             }
         }
+    }
 
-        // printFlow(thread_id, flow);
+    //printFlow(0, flow, 0);
+
+    if(flow->detected_protocol.app_protocol == specific_protocol_number){
+        logger(flow, ndpi_thread_info[thread_id].workflow->ndpi_struct);
     }
 }
 
@@ -1554,6 +1395,8 @@ void sigproc(int sig) {
 
     for(thread_id=0; thread_id<num_threads; thread_id++)
         breakPcapLoop(thread_id);
+
+    fclose(log_ptr);
 }
 
 
@@ -1655,6 +1498,7 @@ static pcap_t * openPcapFileOrDevice(u_int16_t thread_id, const u_char * pcap_fi
 static void pcap_process_packet(u_char *args,
                                 const struct pcap_pkthdr *header,
                                 const u_char *packet) {
+
     struct ndpi_proto p;
     u_int16_t thread_id = *((u_int16_t*)args);
 
@@ -1663,6 +1507,11 @@ static void pcap_process_packet(u_char *args,
 
     memcpy(packet_checked, packet, header->caplen);
     p = ndpi_workflow_process_packet(ndpi_thread_info[thread_id].workflow, header, packet_checked);
+
+    //printResults(0);
+    //printf("%d \n", ndpi_thread_info[thread_id].workflow->num_allocated_flows);
+
+    //ndpi_thread_info[thread_id].workflow->stats.protocol_counter
 
     if((capture_until != 0) && (header->ts.tv_sec >= capture_until)) {
         if(ndpi_thread_info[thread_id].workflow->pcap_handle != NULL)
@@ -1700,12 +1549,7 @@ static void pcap_process_packet(u_char *args,
         }
     }
 
-#ifdef DEBUG_TRACE
-    if(trace) fprintf(trace, "Found %u bytes packet %u.%u\n", header->caplen, p.app_protocol, p.master_protocol);
-#endif
-
-    if(extcap_dumper
-       && ((extcap_packet_filter == (u_int16_t)-1)
+    if(extcap_dumper && ((extcap_packet_filter == (u_int16_t)-1)
            || (p.app_protocol == extcap_packet_filter)
            || (p.master_protocol == extcap_packet_filter)
        )
@@ -1731,10 +1575,6 @@ static void pcap_process_packet(u_char *args,
         *crc = ethernet_crc32((const void*)extcap_buf, h.caplen+sizeof(struct ndpi_packet_trailer));
         h.caplen += delta;
         h.len += delta;
-
-#ifdef DEBUG_TRACE
-        if(trace) fprintf(trace, "Dumping %u bytes packet\n", h.caplen);
-#endif
 
         pcap_dump((u_char*)extcap_dumper, &h, (const u_char *)extcap_buf);
         pcap_dump_flush(extcap_dumper);
@@ -1769,7 +1609,6 @@ static void pcap_process_packet(u_char *args,
     }
 }
 
-
 /**
  * @brief Call pcap_loop() to process packets from a live capture or savefile
  */
@@ -1786,7 +1625,6 @@ void * processing_thread(void *_thread_id) {
     long thread_id = (long) _thread_id;
     char pcap_error_buffer[PCAP_ERRBUF_SIZE];
 
-#if defined(linux) && defined(HAVE_PTHREAD_SETAFFINITY_NP)
     if(core_affinity[thread_id] >= 0) {
     cpu_set_t cpuset;
     CPU_ZERO(&cpuset);
@@ -1798,7 +1636,7 @@ void * processing_thread(void *_thread_id) {
       if(!quiet_mode) printf("Running thread %ld on core %d...\n", thread_id, core_affinity[thread_id]);
     }
   } else
-#endif
+
     if(!quiet_mode) printf("Running thread %ld...\n", thread_id);
 
     pcap_loop:
@@ -1817,7 +1655,6 @@ void * processing_thread(void *_thread_id) {
     return NULL;
 }
 
-
 /**
  * @brief Begin, process, end detection process
  */
@@ -1826,17 +1663,8 @@ void test_lib() {
     u_int64_t tot_usec;
     long thread_id;
 
-#ifdef DEBUG_TRACE
-    if(trace) fprintf(trace, "Num threads: %d\n", num_threads);
-#endif
-
     for(thread_id = 0; thread_id < num_threads; thread_id++) {
         pcap_t *cap;
-
-#ifdef DEBUG_TRACE
-        if(trace) fprintf(trace, "Opening %s\n", (const u_char*)_pcap_file[thread_id]);
-#endif
-
         cap = openPcapFileOrDevice(thread_id, (const u_char*)_pcap_file[thread_id]);
         setupDetection(thread_id, cap);
     }
@@ -1855,13 +1683,6 @@ void test_lib() {
             exit(-1);
         }
     }
-
-
-    while(true){
-        printf("%d", ndpi_thread_info[0].workflow->stats.ip_packet_count);
-    }
-
-
 
     /* Waiting for completion */
     for(thread_id = 0; thread_id < num_threads; thread_id++) {
@@ -1891,8 +1712,6 @@ void test_lib() {
     }
 }
 
-
-
 /**
    @brief MAIN FUNCTION
 **/
@@ -1900,14 +1719,11 @@ int main(int argc, char **argv) {
     int i;
 
     automataUnitTest();
-
     memset(ndpi_thread_info, 0, sizeof(ndpi_thread_info));
-
     parseOptions(argc, argv);
 
     if(!quiet_mode) {
         printf("\n nDPI started \n");
-
         printf("Using nDPI (%s) [%d thread(s)]\n", ndpi_revision(), num_threads);
     }
 

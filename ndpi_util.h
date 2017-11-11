@@ -139,7 +139,6 @@ typedef struct ndpi_workflow {
 } ndpi_workflow_t;
 
 
-/* TODO: remove wrappers parameters and use ndpi global, when their initialization will be fixed... */
 struct ndpi_workflow * ndpi_workflow_init(const struct ndpi_workflow_prefs * prefs, pcap_t * pcap_handle);
 
 
@@ -149,7 +148,6 @@ void ndpi_workflow_free(struct ndpi_workflow * workflow);
 
 /** Free flow_info ndpi support structures but not the flow_info itself
  *
- *  TODO remove! Half freeing things is bad!
  */
 void ndpi_free_flow_info_half(struct ndpi_flow_info *flow);
 
@@ -180,6 +178,36 @@ void process_ndpi_collected_info(struct ndpi_workflow * workflow, struct ndpi_fl
 u_int32_t ethernet_crc32(const void* data, size_t n_bytes);
 void ndpi_flow_info_freer(void *node);
 
+/**
+ * @brief From IPPROTO to string NAME
+ */
+static char* ipProto2Name(u_int16_t proto_id) {
 
+    static char proto[8];
+
+    switch(proto_id) {
+        case IPPROTO_TCP:
+            return("TCP");
+            break;
+        case IPPROTO_UDP:
+            return("UDP");
+            break;
+        case IPPROTO_ICMP:
+            return("ICMP");
+            break;
+        case IPPROTO_ICMPV6:
+            return("ICMPV6");
+            break;
+        case 112:
+            return("VRRP");
+            break;
+        case IPPROTO_IGMP:
+            return("IGMP");
+            break;
+    }
+
+    snprintf(proto, sizeof(proto), "%u", proto_id);
+    return(proto);
+}
 
 #endif

@@ -108,7 +108,6 @@ static void free_wrapper(void *freeable) {
 struct ndpi_workflow * ndpi_workflow_init(const struct ndpi_workflow_prefs * prefs, pcap_t * pcap_handle) {
   set_ndpi_malloc(malloc_wrapper), set_ndpi_free(free_wrapper);
   set_ndpi_flow_malloc(NULL), set_ndpi_flow_free(NULL);
-  /* TODO: just needed here to init ndpi malloc wrapper */
   struct ndpi_detection_module_struct * module = ndpi_init_detection_module();
 
   struct ndpi_workflow * workflow = ndpi_calloc(1, sizeof(struct ndpi_workflow));
@@ -541,7 +540,6 @@ static struct ndpi_proto packet_processing(struct ndpi_workflow * workflow,
       }
     } else if (ndpi_flow != NULL) {
       /* If this wasn't NULL we should do the half free */
-      /* TODO: When half_free is deprecated, get rid of this */
       ndpi_free_flow_info_half(flow);
     }
     

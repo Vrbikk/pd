@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.8)
 project(pd)
 
 set(CMAKE_C_STANDARD 11)
-set(SOURCE_FILES main.c ndpi_util.h ndpi_util.c uthash.h config.h)
+set(SOURCE_FILES main.c ndpi_util.h ndpi_util.c uthash.h config.h logger.c logger.h)
 find_package( Threads )
 add_executable(pd ${SOURCE_FILES})
 
