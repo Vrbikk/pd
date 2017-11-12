@@ -139,5 +139,10 @@ static struct option longopts[] = {
 };
 
 
+struct specific_proto{
+    int *protocols;
+    unsigned char count;
+    bool all;
+} specific_proto_default = {NULL, 0, false};
 
 #endif //PD_STRUCTS_H

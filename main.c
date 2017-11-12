@@ -60,7 +60,9 @@ static char * bpfFilter             = NULL; /**< bpf filter  */
 static char *_protoFilePath         = NULL; /**< Protocol file path  */
 static u_int8_t live_capture = 1;
 static u_int8_t undetected_flows_deleted = 0;
-static u_int8_t specific_protocol_number = 37;
+
+static struct specific_proto sp;
+
 /** User preferences **/
 static u_int8_t enable_protocol_guess = 0, verbose = 1, nDPI_traceLevel = 0, json_flag = 0;
 static u_int8_t stats_flag = 0, bpf_filter_flag = 0;
@@ -86,13 +88,42 @@ static u_int16_t extcap_packet_filter = (u_int16_t)-1;
 u_int32_t current_ndpi_memory = 0, max_ndpi_memory = 0;
 
 
+void set_specific_proto(struct specific_proto *sp, const char *arg){
+    if(arg[0] == '*'){
+        sp->all = true;
+        return;
+    }
+
+    u_int8_t count = 1;
+    for (int i = 0; i < strlen(arg); ++i) {
+        if(arg[i] == ',') count++;
+    }
+
+    sp->count = count;
+    sp->protocols = malloc(count * sizeof(int));
+
+    char * pch;
+    pch = strtok (arg,",");
+    int i = 0;
+    while (pch != NULL)
+    {
+        *(sp->protocols + i++) = atoi(pch);
+        pch = strtok (NULL, ",");
+    }
+}
+
+bool is_valid_proto(struct specific_proto *sp, int protocol_number){
+    for (int i = 0; i < sp->count; ++i) {
+
+        int number = sp->protocols[i];
+        if(number == protocol_number) {
+            return true;
+        }
+    }
+    return false;
+}
+
 void test_lib(); /* Forward */
-
-#ifdef DEBUG_TRACE
-FILE *trace = NULL;
-#endif
-
-/********************** FUNCTIONS ********************* */
 
 /**
  * @brief Set main components necessary to the detection
@@ -127,18 +158,6 @@ static void help(u_int long_help) {
 }
 
 /* ********************************** */
-
-struct ndpi_proto_sorter {
-    int id;
-    char name[16];
-};
-
-int cmpProto(const void *_a, const void *_b) {
-    struct ndpi_proto_sorter *a = (struct ndpi_proto_sorter*)_a;
-    struct ndpi_proto_sorter *b = (struct ndpi_proto_sorter*)_b;
-
-    return(strcmp(a->name, b->name));
-}
 
 int cmpFlows(const void *_a, const void *_b) {
     struct ndpi_flow_info *fa = ((struct flow_info*)_a)->flow;
@@ -188,6 +207,7 @@ void extcap_capture() {
  * @brief Option parser
  */
 static void parseOptions(int argc, char **argv) {
+    sp = specific_proto_default;
     int option_idx = 0, do_capture = 0;
     char *__pcap_file = NULL, *bind_mask = NULL;
     int thread_id, opt;
@@ -224,7 +244,11 @@ static void parseOptions(int argc, char **argv) {
                 exit(0);
 
             case 'v':
-                specific_protocol_number = atoi(optarg);
+                if(optarg != NULL){
+                    set_specific_proto(&sp, optarg);
+                }else{
+                    help(0);
+                }
                 break;
 
             case 'V':
@@ -283,6 +307,7 @@ static void parseOptions(int argc, char **argv) {
         }
     }
 
+
 }
 
 /**
@@ -336,9 +361,6 @@ static void printFlow(u_int16_t id, struct ndpi_flow_info *flow, u_int16_t threa
         fprintf(out, "\n");
     }
 }
-
-
-
 
 /**
  * @brief Unknown Proto Walker
@@ -844,8 +866,6 @@ static void node_idle_scan_walker(const void *node, ndpi_VISIT which, int depth,
 static void on_protocol_discovered(struct ndpi_workflow * workflow,
                                    struct ndpi_flow_info * flow,
                                    void * udata) {
-    //TODO on proto discovered
-    //printf("%d - protocol discovered - %d\n ", j++, flow->detected_protocol.app_protocol);
 
     const u_int16_t thread_id = (uintptr_t) udata;
 
@@ -858,11 +878,10 @@ static void on_protocol_discovered(struct ndpi_workflow * workflow,
         }
     }
 
-    printFlow(0, flow, 0);
-
-    //if(flow->detected_protocol.app_protocol == specific_protocol_number){
+    if(sp.all == true || is_valid_proto(&sp, flow->detected_protocol.app_protocol)){
+        printFlow(0, flow, 0);
         logger(flow, ndpi_thread_info[thread_id].workflow->ndpi_struct);
-    //}
+    }
 }
 
 /**
