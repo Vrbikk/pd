@@ -2,17 +2,22 @@
 // Created by vrbik on 11.11.17.
 //
 
-
 #include "logger.h"
 
 void setup_logger(const char *file){
+
+    logging_file = NULL;
+    log_ptr = NULL;
+
     logging_file = file;
     FILE *fptr;
-    fptr = fopen(logging_file, "rb+");
+    fptr = fopen(logging_file, "rb");
+
     if(fptr == NULL){
-        fopen(logging_file, "wb");
-        fclose(fptr);
+        fptr = fopen(logging_file, "wb");
     }
+
+    fclose(fptr);
 }
 
 void logger(struct ndpi_flow_info *flow, struct ndpi_detection_module_struct *ndpi_struct){
@@ -64,6 +69,7 @@ void logger(struct ndpi_flow_info *flow, struct ndpi_detection_module_struct *nd
         if(flow->bittorent_hash[0] != '\0') fprintf(log_ptr, "[BT Hash: %s]", flow->bittorent_hash);
 
         fprintf(log_ptr, "\n");
+
 
 }
 

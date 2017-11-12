@@ -106,16 +106,16 @@ static void help(u_int long_help) {
     printf("Welcome to nDPI %s\n\n", ndpi_revision());
 
     printf(             "Usage:\n"
-                   "  -i <file.pcap|device>     | Specify a pcap file/playlist to read packets from or a\n"
-                   "                            | device for live capture (comma-separated list)\n"
-                   "  -s <duration>             | Maximum capture duration in seconds (live traffic capture only)\n"
-                   "  -p <file>.protos          | Specify a protocol file (eg. protos.txt)\n"
-                   "                            | Ignored with pcap files.\n"
-                   "  -q                        | Quiet mode\n"
-                   "  -r                        | Print nDPI version and git revision\n"
-                   "  -w <path>                 |logging file for specific protocol flow detection\n"
-                   "  -h                        | This help\n"
-                   "  -v                        | protocol number to log\n");
+                                "  -i <file.pcap|device>     | Specify a pcap file/playlist to read packets from or a\n"
+                                "                            | device for live capture (comma-separated list)\n"
+                                "  -s <duration>             | Maximum capture duration in seconds (live traffic capture only)\n"
+                                "  -p <file>.protos          | Specify a protocol file (eg. protos.txt)\n"
+                                "                            | Ignored with pcap files.\n"
+                                "  -q                        | Quiet mode\n"
+                                "  -r                        | Print nDPI version and git revision\n"
+                                "  -w <path>                 |logging file for specific protocol flow detection\n"
+                                "  -h                        | This help\n"
+                                "  -v                        | protocol number to log\n");
 
     if (long_help) {
         printf("\n\nSupported protocols:\n");
@@ -157,44 +157,6 @@ int cmpFlows(const void *_a, const void *_b) {
     if(htonl(fa->dst_ip)   < htonl(fb->dst_ip)  ) return(-1); else { if(htonl(fa->dst_ip)   > htonl(fb->dst_ip)  ) return(1); }
     if(htons(fa->dst_port) < htons(fb->dst_port)) return(-1); else { if(htons(fa->dst_port) > htons(fb->dst_port)) return(1); }
     return(0);
-}
-
-void extcap_config() {
-    int i, argidx = 0;
-    struct ndpi_detection_module_struct *ndpi_mod;
-    struct ndpi_proto_sorter *protos;
-
-    /* -i <interface> */
-    printf("arg {number=%d}{call=-i}{display=Capture Interface or Pcap File Path}{type=string}"
-                   "{tooltip=The interface name}\n", argidx++);
-    printf("arg {number=%d}{call=-i}{display=Pcap File to Analyze}{type=fileselect}"
-                   "{tooltip=The pcap file to analyze (if the interface is unspecified)}\n", argidx++);
-
-    setupDetection(0, NULL);
-    ndpi_mod = ndpi_thread_info[0].workflow->ndpi_struct;
-
-    protos = (struct ndpi_proto_sorter*)malloc(sizeof(struct ndpi_proto_sorter)*ndpi_mod->ndpi_num_supported_protocols);
-    if(!protos) exit(0);
-
-    for(i=0; i<(int)ndpi_mod->ndpi_num_supported_protocols; i++) {
-        protos[i].id = i;
-        snprintf(protos[i].name, sizeof(protos[i].name), "%s", ndpi_mod->proto_defaults[i].protoName);
-    }
-
-    qsort(protos, ndpi_mod->ndpi_num_supported_protocols, sizeof(struct ndpi_proto_sorter), cmpProto);
-
-    printf("arg {number=%d}{call=-9}{display=nDPI Protocol Filter}{type=selector}"
-                   "{tooltip=nDPI Protocol to be filtered}\n", argidx);
-
-    printf("value {arg=%d}{value=%d}{display=%s}\n", argidx, -1, "All Protocols (no nDPI filtering)");
-
-    for(i=0; i<(int)ndpi_mod->ndpi_num_supported_protocols; i++)
-        printf("value {arg=%d}{value=%d}{display=%s (%d)}\n", argidx, protos[i].id,
-               protos[i].name, protos[i].id);
-
-    free(protos);
-
-    exit(0);
 }
 
 /* ********************************** */
@@ -271,7 +233,7 @@ static void parseOptions(int argc, char **argv) {
                 break;
 
             case 'w':
-                setup_logger(strdup(optarg));
+                setup_logger(optarg);
                 break;
 
             case 'q':
@@ -321,40 +283,6 @@ static void parseOptions(int argc, char **argv) {
         }
     }
 
-}
-
-
-/**
- * @brief A faster replacement for inet_ntoa().
- */
-char* intoaV4(u_int32_t addr, char* buf, u_int16_t bufLen) {
-
-    char *cp, *retStr;
-    uint byte;
-    int n;
-
-    cp = &buf[bufLen];
-    *--cp = '\0';
-
-    n = 4;
-    do {
-        byte = addr & 0xff;
-        *--cp = byte % 10 + '0';
-        byte /= 10;
-        if(byte > 0) {
-            *--cp = byte % 10 + '0';
-            byte /= 10;
-            if(byte > 0)
-                *--cp = byte + '0';
-        }
-        *--cp = '.';
-        addr >>= 8;
-    } while (--n > 0);
-
-    /* Convert the string to lowercase */
-    retStr = (char*)(cp+1);
-
-    return(retStr);
 }
 
 /**
@@ -930,11 +858,11 @@ static void on_protocol_discovered(struct ndpi_workflow * workflow,
         }
     }
 
-    //printFlow(0, flow, 0);
+    printFlow(0, flow, 0);
 
-    if(flow->detected_protocol.app_protocol == specific_protocol_number){
+    //if(flow->detected_protocol.app_protocol == specific_protocol_number){
         logger(flow, ndpi_thread_info[thread_id].workflow->ndpi_struct);
-    }
+    //}
 }
 
 /**
@@ -1249,8 +1177,8 @@ static void printResults(u_int64_t tot_usec) {
                         cumulative_stats.protocol_flows[i]);
 
             if(!quiet_mode) {
-                printf("\t%-20s packets: %-13llu bytes: %-13llu "
-                               "flows: %-13u\n",
+                printf("[%d] \t%-20s packets: %-13llu bytes: %-13llu "
+                               "flows: %-13u\n", i,
                        ndpi_get_proto_name(ndpi_thread_info[0].workflow->ndpi_struct, i),
                        (long long unsigned int)cumulative_stats.protocol_counter[i],
                        (long long unsigned int)cumulative_stats.protocol_counter_bytes[i],
@@ -1396,7 +1324,7 @@ void sigproc(int sig) {
     for(thread_id=0; thread_id<num_threads; thread_id++)
         breakPcapLoop(thread_id);
 
-    fclose(log_ptr);
+    //fclose(log_ptr);
 }
 
 
@@ -1550,9 +1478,9 @@ static void pcap_process_packet(u_char *args,
     }
 
     if(extcap_dumper && ((extcap_packet_filter == (u_int16_t)-1)
-           || (p.app_protocol == extcap_packet_filter)
-           || (p.master_protocol == extcap_packet_filter)
-       )
+                         || (p.app_protocol == extcap_packet_filter)
+                         || (p.master_protocol == extcap_packet_filter)
+    )
             ) {
         struct pcap_pkthdr h;
         uint32_t *crc, delta = sizeof(struct ndpi_packet_trailer) + 4 /* ethernet trailer */;
@@ -1626,16 +1554,16 @@ void * processing_thread(void *_thread_id) {
     char pcap_error_buffer[PCAP_ERRBUF_SIZE];
 
     if(core_affinity[thread_id] >= 0) {
-    cpu_set_t cpuset;
-    CPU_ZERO(&cpuset);
-    CPU_SET(core_affinity[thread_id], &cpuset);
+        cpu_set_t cpuset;
+        CPU_ZERO(&cpuset);
+        CPU_SET(core_affinity[thread_id], &cpuset);
 
-    if(pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset) != 0)
-      fprintf(stderr, "Error while binding thread %ld to core %d\n", thread_id, core_affinity[thread_id]);
-    else {
-      if(!quiet_mode) printf("Running thread %ld on core %d...\n", thread_id, core_affinity[thread_id]);
-    }
-  } else
+        if(pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset) != 0)
+            fprintf(stderr, "Error while binding thread %ld to core %d\n", thread_id, core_affinity[thread_id]);
+        else {
+            if(!quiet_mode) printf("Running thread %ld on core %d...\n", thread_id, core_affinity[thread_id]);
+        }
+    } else
 
     if(!quiet_mode) printf("Running thread %ld...\n", thread_id);
 
@@ -1651,7 +1579,6 @@ void * processing_thread(void *_thread_id) {
             goto pcap_loop;
         }
     }
-
     return NULL;
 }
 
