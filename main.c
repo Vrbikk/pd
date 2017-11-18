@@ -50,6 +50,7 @@
 #include "structs.h"
 #include "tests.c"
 #include "logger.h"
+#include "db.h"
 
 /** Client parameters **/
 static char *_pcap_file[MAX_NUM_READER_THREADS]; /**< Ingress pcap file/interfaces */
@@ -64,7 +65,7 @@ static u_int8_t undetected_flows_deleted = 0;
 static struct specific_proto sp;
 
 /** User preferences **/
-static u_int8_t enable_protocol_guess = 0, verbose = 1, nDPI_traceLevel = 0, json_flag = 0;
+static u_int8_t enable_protocol_guess = 0, verbose = 1, json_flag = 0;
 static u_int8_t stats_flag = 0, bpf_filter_flag = 0;
 static u_int32_t pcap_analysis_duration = (u_int32_t)-1;
 static u_int16_t decode_tunnels = 0;
@@ -146,7 +147,7 @@ static void help(u_int long_help) {
                                 "  -r                        | Print nDPI version and git revision\n"
                                 "  -w <path>                 |logging file for specific protocol flow detection\n"
                                 "  -h                        | This help\n"
-                                "  -v                        | protocol number to log\n");
+                                "  -v                        | protocol number to log \\* for all or 1,2,3....\n");
 
     if (long_help) {
         printf("\n\nSupported protocols:\n");
@@ -249,11 +250,6 @@ static void parseOptions(int argc, char **argv) {
                 }else{
                     help(0);
                 }
-                break;
-
-            case 'V':
-                printf("%d\n",atoi(optarg) );
-                nDPI_traceLevel  = atoi(optarg);
                 break;
 
             case 'w':
@@ -414,8 +410,6 @@ static u_int16_t node_guess_undetected_protocol(u_int16_t thread_id, struct ndpi
 
     return(flow->detected_protocol.app_protocol);
 }
-
-int jej = 0;
 
 /**
  * @brief Proto Guess Walker
@@ -881,6 +875,12 @@ static void on_protocol_discovered(struct ndpi_workflow * workflow,
     if(sp.all == true || is_valid_proto(&sp, flow->detected_protocol.app_protocol)){
         printFlow(0, flow, 0);
         logger(flow, ndpi_thread_info[thread_id].workflow->ndpi_struct);
+
+        if(ip_exists(flow->src_name)){
+            update_flow(flow, ndpi_thread_info[thread_id].workflow->ndpi_struct);
+        }else{
+            insert_flow(flow, ndpi_thread_info[thread_id].workflow->ndpi_struct);
+        }
     }
 }
 
@@ -1222,7 +1222,7 @@ static void printResults(u_int64_t tot_usec) {
 
     // printf("\n\nTotal Flow Traffic: %llu (diff: %llu)\n", total_flow_bytes, cumulative_stats.total_ip_bytes-total_flow_bytes);
 
-    if((verbose == 1) || (verbose == 2)) {
+    if((verbose == 2)) {
         FILE *out = results_file ? results_file : stdout;
         u_int32_t total_flows = 0;
 
@@ -1662,6 +1662,10 @@ void test_lib() {
    @brief MAIN FUNCTION
 **/
 int main(int argc, char **argv) {
+
+    init_conn();
+
+
     int i;
 
     automataUnitTest();
@@ -1681,6 +1685,8 @@ int main(int argc, char **argv) {
     if(results_path)  free(results_path);
     if(results_file)  fclose(results_file);
     if(extcap_dumper) pcap_dump_close(extcap_dumper);
+
+    close_conn();
 
     return 0;
 }
