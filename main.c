@@ -876,7 +876,7 @@ static void on_protocol_discovered(struct ndpi_workflow * workflow,
         printFlow(0, flow, 0);
         logger(flow, ndpi_thread_info[thread_id].workflow->ndpi_struct);
 
-        if(ip_exists(flow->src_name)){
+        if(ip_exists(flow->src_name, flow->detected_protocol.app_protocol, ndpi_thread_info[thread_id].workflow->ndpi_struct)){
             update_flow(flow, ndpi_thread_info[thread_id].workflow->ndpi_struct);
         }else{
             insert_flow(flow, ndpi_thread_info[thread_id].workflow->ndpi_struct);
