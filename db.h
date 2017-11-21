@@ -18,6 +18,7 @@ MYSQL *conn;
 MYSQL_RES *res;
 MYSQL_ROW row;
 
+void parse_config();
 void init_conn();
 void create_table_protocol(int id, const char *name);
 bool ip_exists(const char *ip, int id, struct ndpi_detection_module_struct *ndpi_struct);

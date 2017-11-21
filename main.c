@@ -61,7 +61,6 @@ static char * bpfFilter             = NULL; /**< bpf filter  */
 static char *_protoFilePath         = NULL; /**< Protocol file path  */
 static u_int8_t live_capture = 1;
 static u_int8_t undetected_flows_deleted = 0;
-
 static struct specific_proto sp;
 
 /** User preferences **/
@@ -71,6 +70,7 @@ static u_int32_t pcap_analysis_duration = (u_int32_t)-1;
 static u_int16_t decode_tunnels = 0;
 static u_int16_t num_loops = 1;
 static u_int8_t shutdown_app = 0, quiet_mode = 0;
+bool enable_mysql = false;
 static u_int8_t num_threads = 1;
 static struct timeval begin, end;
 static int core_affinity[MAX_NUM_READER_THREADS];
@@ -144,8 +144,8 @@ static void help(u_int long_help) {
                                 "  -p <file>.protos          | Specify a protocol file (eg. protos.txt)\n"
                                 "                            | Ignored with pcap files.\n"
                                 "  -q                        | Quiet mode\n"
-                                "  -r                        | Print nDPI version and git revision\n"
-                                "  -w <path>                 |logging file for specific protocol flow detection\n"
+                                "  -r                        | enable mysql logging\n"
+                                "  -w <path>                 | logging file for specific protocol flow detection\n"
                                 "  -h                        | This help\n"
                                 "  -v                        | protocol number to log \\* for all or 1,2,3....\n");
 
@@ -241,9 +241,8 @@ static void parseOptions(int argc, char **argv) {
                 break;
 
             case 'r':
-                printf("ndpiReader - nDPI (%s)\n", ndpi_revision());
-                exit(0);
-
+               enable_mysql = true;
+                break;
             case 'v':
                 if(optarg != NULL){
                     set_specific_proto(&sp, optarg);
@@ -876,10 +875,13 @@ static void on_protocol_discovered(struct ndpi_workflow * workflow,
         printFlow(0, flow, 0);
         logger(flow, ndpi_thread_info[thread_id].workflow->ndpi_struct);
 
-        if(ip_exists(flow->src_name, flow->detected_protocol.app_protocol, ndpi_thread_info[thread_id].workflow->ndpi_struct)){
-            update_flow(flow, ndpi_thread_info[thread_id].workflow->ndpi_struct);
-        }else{
-            insert_flow(flow, ndpi_thread_info[thread_id].workflow->ndpi_struct);
+        if(enable_mysql) {
+            if (ip_exists(flow->src_name, flow->detected_protocol.app_protocol,
+                          ndpi_thread_info[thread_id].workflow->ndpi_struct)) {
+                update_flow(flow, ndpi_thread_info[thread_id].workflow->ndpi_struct);
+            } else {
+                insert_flow(flow, ndpi_thread_info[thread_id].workflow->ndpi_struct);
+            }
         }
     }
 }
@@ -1663,14 +1665,14 @@ void test_lib() {
 **/
 int main(int argc, char **argv) {
 
-    init_conn();
-
 
     int i;
 
     automataUnitTest();
     memset(ndpi_thread_info, 0, sizeof(ndpi_thread_info));
     parseOptions(argc, argv);
+
+    if(enable_mysql) init_conn();
 
     if(!quiet_mode) {
         printf("\n nDPI started \n");
@@ -1686,7 +1688,7 @@ int main(int argc, char **argv) {
     if(results_file)  fclose(results_file);
     if(extcap_dumper) pcap_dump_close(extcap_dumper);
 
-    close_conn();
+    if(enable_mysql) close_conn();
 
     return 0;
 }
