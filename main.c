@@ -873,7 +873,10 @@ static void on_protocol_discovered(struct ndpi_workflow * workflow,
 
     if(sp.all == true || is_valid_proto(&sp, flow->detected_protocol.app_protocol)){
         printFlow(0, flow, 0);
-        logger(flow, ndpi_thread_info[thread_id].workflow->ndpi_struct);
+
+        if(logging_file != NULL) {
+            logger(flow, ndpi_thread_info[thread_id].workflow->ndpi_struct);
+        }
 
         if(enable_mysql) {
             if (ip_exists(flow->src_name, flow->detected_protocol.app_protocol,
@@ -1664,7 +1667,6 @@ void test_lib() {
    @brief MAIN FUNCTION
 **/
 int main(int argc, char **argv) {
-
 
     int i;
 
