@@ -61,10 +61,12 @@ static char * bpfFilter             = NULL; /**< bpf filter  */
 static char *_protoFilePath         = NULL; /**< Protocol file path  */
 static u_int8_t live_capture = 1;
 static u_int8_t undetected_flows_deleted = 0;
+
+const struct specific_proto specific_proto_default = {NULL, 0, false};
 static struct specific_proto sp;
 
 /** User preferences **/
-static u_int8_t enable_protocol_guess = 0, verbose = 1, json_flag = 0;
+static u_int8_t enable_protocol_guess = 1, verbose = 1, json_flag = 0;
 static u_int8_t stats_flag = 0, bpf_filter_flag = 0;
 static u_int32_t pcap_analysis_duration = (u_int32_t)-1;
 static u_int16_t decode_tunnels = 0;
@@ -87,31 +89,6 @@ static u_int16_t extcap_packet_filter = (u_int16_t)-1;
 
 // used memory counters
 u_int32_t current_ndpi_memory = 0, max_ndpi_memory = 0;
-
-
-void set_specific_proto(struct specific_proto *sp, const char *arg){
-    if(arg[0] == '*'){
-        sp->all = true;
-        return;
-    }
-
-    u_int8_t count = 1;
-    for (int i = 0; i < strlen(arg); ++i) {
-        if(arg[i] == ',') count++;
-    }
-
-    sp->count = count;
-    sp->protocols = malloc(count * sizeof(int));
-
-    char * pch;
-    pch = strtok (arg,",");
-    int i = 0;
-    while (pch != NULL)
-    {
-        *(sp->protocols + i++) = atoi(pch);
-        pch = strtok (NULL, ",");
-    }
-}
 
 bool is_valid_proto(struct specific_proto *sp, int protocol_number){
     for (int i = 0; i < sp->count; ++i) {
@@ -860,16 +837,9 @@ static void on_protocol_discovered(struct ndpi_workflow * workflow,
                                    struct ndpi_flow_info * flow,
                                    void * udata) {
 
-    const u_int16_t thread_id = (uintptr_t) udata;
+    if(flow->ip_version == 6) return;
 
-    if(verbose > 1) {
-        if(enable_protocol_guess) {
-            if(flow->detected_protocol.app_protocol == NDPI_PROTOCOL_UNKNOWN) {
-                flow->detected_protocol.app_protocol = node_guess_undetected_protocol(thread_id, flow),
-                        flow->detected_protocol.master_protocol = NDPI_PROTOCOL_UNKNOWN;
-            }
-        }
-    }
+    const u_int16_t thread_id = (uintptr_t) udata;
 
     if(sp.all == true || is_valid_proto(&sp, flow->detected_protocol.app_protocol)){
         printFlow(0, flow, 0);
@@ -879,11 +849,30 @@ static void on_protocol_discovered(struct ndpi_workflow * workflow,
         }
 
         if(enable_mysql) {
-            if (ip_exists(flow->src_name, flow->detected_protocol.app_protocol,
+
+            /*if (ip_exists(flow->src_name, flow->detected_protocol.app_protocol,
                           ndpi_thread_info[thread_id].workflow->ndpi_struct)) {
                 update_flow(flow, ndpi_thread_info[thread_id].workflow->ndpi_struct);
             } else {
                 insert_flow(flow, ndpi_thread_info[thread_id].workflow->ndpi_struct);
+            }*/
+
+            if(src_ip_exists(flow)){
+                update_host();
+            }else{
+                insert_host(flow);
+            }
+
+            if(protocol_exists(flow, ndpi_thread_info[thread_id].workflow->ndpi_struct)){
+                update_protocol();
+            }else{
+                insert_protocol(flow, ndpi_thread_info[thread_id].workflow->ndpi_struct);
+            }
+
+            if(conn_exists(flow)){
+                update_conn(flow);
+            }else{
+                insert_conn(flow);
             }
         }
     }
@@ -1091,10 +1080,16 @@ static void printResults(u_int64_t tot_usec) {
            && (ndpi_thread_info[thread_id].workflow->stats.raw_packet_count == 0))
             continue;
 
+        printf("\n ---- %d\n",ndpi_thread_info[thread_id].workflow->stats.protocol_counter_bytes[37]);
+
+
         for(i=0; i<NUM_ROOTS; i++) {
             ndpi_twalk(ndpi_thread_info[thread_id].workflow->ndpi_flows_root[i], node_proto_guess_walker, &thread_id);
             if(verbose == 3 || stats_flag) ndpi_twalk(ndpi_thread_info[thread_id].workflow->ndpi_flows_root[i], port_stats_walker, &thread_id);
         }
+
+        printf("\n ---- %d\n",ndpi_thread_info[thread_id].workflow->stats.protocol_counter_bytes[37]);
+
 
         /* Stats aggregation */
         cumulative_stats.guessed_flow_protocols += ndpi_thread_info[thread_id].workflow->stats.guessed_flow_protocols;
@@ -1674,7 +1669,7 @@ int main(int argc, char **argv) {
     memset(ndpi_thread_info, 0, sizeof(ndpi_thread_info));
     parseOptions(argc, argv);
 
-    if(enable_mysql) init_conn();
+    if(enable_mysql) init_conn(&sp);
 
     if(!quiet_mode) {
         printf("\n nDPI started \n");

@@ -41,16 +41,6 @@
 #define TICK_RESOLUTION          1000
 #define MAX_NUM_IP_ADDRESS          5  /* len of ip address array */
 #define UPDATED_TREE                1
-#define AGGRESSIVE_PERCENT      95.00
-#define DIR_SRC                    10
-#define DIR_DST                    20
-#define PORT_ARRAY_SIZE            20
-#define HOST_ARRAY_SIZE            20
-#define FLOWS_PACKETS_THRESHOLD   0.9
-#define FLOWS_PERCENT_THRESHOLD   1.0
-#define FLOWS_PERCENT_THRESHOLD_2 0.2
-#define FLOWS_THRESHOLD          1000
-#define PKTS_PERCENT_THRESHOLD    0.1
 #define MAX_TABLE_SIZE_1         4096
 #define MAX_TABLE_SIZE_2         8192
 #define INIT_VAL                   -1
