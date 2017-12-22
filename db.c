@@ -4,14 +4,8 @@
 
 #include "db.h"
 
-
-
+// array of char pointers which will be allocated in parse_config function
 char *config[5];
-
-/*char *server = NULL;
-char *user = NULL;
-char *password = NULL;
-char *database = NULL;*/
 
 void set_specific_proto(struct specific_proto *sp, const char *arg){
     if(arg[0] == '*'){
@@ -214,6 +208,8 @@ bool src_ip_exists(struct ndpi_flow_info *flow){
     return ((row = mysql_fetch_row(res)) != NULL) ? true : false;
 }
 
+
+//TODO resoluce hostname
 void insert_host(struct ndpi_flow_info *flow){
     char text[300];
     snprintf(text, sizeof(text), "insert into hosts (log_id, ip, hostname, last_active_at) values (%u, %u, \"%s\", CURRENT_TIMESTAMP)",

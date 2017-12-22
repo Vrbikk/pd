@@ -115,16 +115,12 @@ static void help(u_int long_help) {
     printf("Welcome to nDPI %s\n\n", ndpi_revision());
 
     printf(             "Usage:\n"
-                                "  -i <file.pcap|device>     | Specify a pcap file/playlist to read packets from or a\n"
-                                "                            | device for live capture (comma-separated list)\n"
-                                "  -s <duration>             | Maximum capture duration in seconds (live traffic capture only)\n"
-                                "  -p <file>.protos          | Specify a protocol file (eg. protos.txt)\n"
-                                "                            | Ignored with pcap files.\n"
-                                "  -q                        | Quiet mode\n"
+                                " sudo ./pd -i enp0s25 -r (db config in config file)\n"
+                                " sudo ./pd -i enp0s25 -w soubor.txt -v * (all protocols to file without db)\n"
+                                "  -i <file.pcap|device>     | Specify a pcap file/playlist to read packets from or a - needed for all usecases\n"
                                 "  -r                        | enable mysql logging\n"
-                                "  -w <path>                 | logging file for specific protocol flow detection\n"
-                                "  -h                        | This help\n"
-                                "  -v                        | protocol number to log \\* for all or 1,2,3....\n");
+                                "  -w <path>                 | logging file for specific protocol flow detection with -v param \n"
+                                "  -v                        | protocol number to log into file \\* for all or 1,2,3....\n");
 
     if (long_help) {
         printf("\n\nSupported protocols:\n");
@@ -194,28 +190,12 @@ static void parseOptions(int argc, char **argv) {
     while ((opt = getopt_long(argc, argv, "df:g:i:hp:l:s:tv:V:n:j:rp:w:q0123:456:7:89:m:b:x:", longopts, &option_idx)) != EOF) {
 
         switch (opt) {
-            case 'd':
-                enable_protocol_guess = 0;
-                break;
 
             case 'i':
             case '3':
                 _pcap_file[0] = optarg;
                 break;
 
-            case 'f':
-            case '6':
-                bpfFilter = optarg;
-                break;
-
-            case 's':
-                capture_for = atoi(optarg);
-                capture_until = capture_for + time(NULL);
-                break;
-
-            case 't':
-                decode_tunnels = 1;
-                break;
 
             case 'r':
                enable_mysql = true;
@@ -230,10 +210,6 @@ static void parseOptions(int argc, char **argv) {
 
             case 'w':
                 setup_logger(optarg);
-                break;
-
-            case 'q':
-                quiet_mode = 1;
                 break;
 
             default:

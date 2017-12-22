@@ -14,7 +14,14 @@
 const char* logging_file;
 FILE *log_ptr;
 
+/**
+ * create file if not exists
+ */
 void setup_logger(const char *file);
+
+/**
+ * Log flow into file its basicaly same print method used in main.c
+ */
 void logger(struct ndpi_flow_info *flow, struct ndpi_detection_module_struct *ndpi_struct);
 
 #endif //PD_LOGGER_H
